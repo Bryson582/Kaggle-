@@ -1,0 +1,68 @@
+---
+title: "Kaggle_Titanic"
+output: html_document
+---
+
+RMS Titanic was a British passenger liner operated by the White Star Line that sank in the North Atlantic Ocean in the early morning hours of 15 April 1912, after striking an iceberg during her maiden voyage from Southampton to New York City. Of the estimated 2,224 passengers and crew aboard, more than 1,500 died, making the sinking one of modern history's deadliest peacetime commercial marine disasters. RMS Titanic was the largest ship afloat at the time she entered service and was the second of three Olympic-class ocean liners operated by the White Star Line. She was built by the Harland and Wolff shipyard in Belfast. Thomas Andrews, chief naval architect of the shipyard at the time, died in the disaster.(https://en.wikipedia.org/wiki/Titanic)
+```{r}
+library(readxl)
+library(mice)
+library("VIM")
+library(mice)
+library(MASS)
+library(nnet)
+```
+
+
+To begin with, we have to put in our data in our working environment
+```{r}
+train <- read_excel("Desktop/train.xls")
+head(train,n=6)
+summary(train)
+library(readxl)
+test <- read_excel("Desktop/test.xlsx")
+head(train,n=6)
+summary(test)
+```
+We have to see how many passengers in our dataset.
+```{r}
+noquote(paste("The train dataset contains ", nrow(train), " passangers."))
+noquote(paste("The test dataset contains ", nrow(test), " passangers."))
+```
+We can see that there are 891 passengers in training dataset, while consistently there are 418 passengers in testing dataset, because we have already known the survivied result in training data. So I think we should build our model in train dataset firstly.
+```{r}
+str(train)
+```
+But we can see that there are many missing values in the dataset. So we have to deal with it firstly.
+```{r}
+sort(colSums(is.na(train)))
+```
+Apparently, there are lots of missing vlaues in this dataset, especially in "Age" and "Cabin"  column. So we have to sovle it.And I think wen can use "VIM" packages to illustrate missing values in plot.
+```{r}
+aggr(train,prop= FALSE,numbers=TRUE)
+md.pairs(train)
+```
+We can see that variable 'Cabin' has the most missing values reaching over 600.And there are 183 passengers which do not have missing values.
+However, because I want to use age and cabin as our facors, so I choose to delete 158
+```{r}
+train_demo <- mice(train,m=5,maxit=50,meth='pmm',seed=500);
+```
+```{r}
+train_demo$imp
+```
+
+```{r}
+train_demo <-  data.frame(complete(imp))
+sort(colSums(is.na(train_demo)))
+```
+We can see that age do not having any missing values, and becaues of too many missing values in 'Cabin', so I decide to delete 'Cabin' this column.
+```{r}
+train_demo <- train_demo[,-11]
+sort(colSums(is.na(train_demo)))
+```
+But there is still  2 missing vlaues in 'Embarked'. We can use the same way to add these 2 missing values in our dataset.
+
+
+
+
+
