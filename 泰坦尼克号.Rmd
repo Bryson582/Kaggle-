@@ -11,23 +11,23 @@ library("VIM")
 library(mice)
 library(MASS)
 library(nnet)
+library(ggplot2)
 ```
 
 
-To begin with, we have to put in our data in our working environment
+# Data loading and cleaning
 ```{r}
-train <- read_excel("Desktop/train.xls")
+train <- read_excel("/Users/brycelee/Documents/titanic/train.xls")
 head(train,n=6)
 summary(train)
 library(readxl)
-test <- read_excel("Desktop/test.xlsx")
+test <- read_excel("/Users/brycelee/Documents/titanic/test.xlsx")
 head(train,n=6)
 summary(test)
 ```
 We have to see how many passengers in our dataset.
 ```{r}
 noquote(paste("The train dataset contains ", nrow(train), " passangers."))
-noquote(paste("The test dataset contains ", nrow(test), " passangers."))
 ```
 We can see that there are 891 passengers in training dataset, while consistently there are 418 passengers in testing dataset, because we have already known the survivied result in training data. So I think we should build our model in train dataset firstly.
 ```{r}
@@ -36,33 +36,129 @@ str(train)
 But we can see that there are many missing values in the dataset. So we have to deal with it firstly.
 ```{r}
 sort(colSums(is.na(train)))
+sort(colSums(is.na(test)))
+# Now we want to add 'gender_submission' in our test dataset.
+gender_submission <- read_excel("Documents/titanic/gender_submission.xls")
+test_new_demo<- cbind(test,gender_submission[,2])
 ```
 Apparently, there are lots of missing vlaues in this dataset, especially in "Age" and "Cabin"  column. So we have to sovle it.And I think wen can use "VIM" packages to illustrate missing values in plot.
 ```{r}
 aggr(train,prop= FALSE,numbers=TRUE)
 md.pairs(train)
 ```
-We can see that variable 'Cabin' has the most missing values reaching over 600.And there are 183 passengers which do not have missing values.
-However, because I want to use age and cabin as our facors, so I choose to delete 158
-```{r}
-train_demo <- mice(train,m=5,maxit=50,meth='pmm',seed=500);
-```
-```{r}
-train_demo$imp
-```
+We can see that variable 'Cabin' has the most missing values reaching over 600.And there are 183 passengers which do not have missing values.Now we have to deal with missing values.Because of too many missing values.We have to consider if it is necessary to save them. So I think we should use corrplot to check their corrleationships between survievd and the other three variables which have missing values(Age,Embarked,Cabin). And we have to choose these 183 passengers which do not have any missing values to consider.
+
+For age and Cabin:
+
+Because in there I really do not know how to replace varaibles in R working environment, so I decide to change that in Excel. And I will use replacing function in Excel.Like in the Cabin, I will change data with A head to 1, with B head to 2..........But I do not know there it is a better way. I am a beginner. So if you have better way to deal with that, please tell me. Thanks a lot.
 
 ```{r}
-train_demo <-  data.frame(complete(imp))
-sort(colSums(is.na(train_demo)))
+train_demo <- na.omit(train)
+nonvars = c("Survived","Age","Cabin")
+train_demo1 <- train_demo[nonvars]
+# I choose to put out our data to Excel.
+write.csv(train_demo1,file="/Users/brycelee/Documents/titanic/train_demo1.csv",quote=F,row.names = F)
+# After this, I will pit in my data into our environment.
+library(readxl)
+train_demo1 <- read_excel("/Users/brycelee/Documents/titanic/train_demo1.xls")
+str(train_demo1)
+cor(train_demo1)
 ```
-We can see that age do not having any missing values, and becaues of too many missing values in 'Cabin', so I decide to delete 'Cabin' this column.
+We can see that the corrleation between Survived and Cabin is about 0.02 compared to (-0.2) between age and survived. So I decide to delete this this column in our model but save the age.
+I want to explain that two reasons that I decided to delete 'Cabin'
+1, too may missing values in 'Cabin'. Although we can use some ways to add these 'NA'. But it will affect our model.
+2, low corrleation. As we can see that R-corrleation is approximately 0.02, so I do not believe 'Cabin' should be considered as our independent variable in our model.
 ```{r}
-train_demo <- train_demo[,-11]
-sort(colSums(is.na(train_demo)))
+train_new <- train[ , !names(train) %in% c("Cabin")]
 ```
-But there is still  2 missing vlaues in 'Embarked'. We can use the same way to add these 2 missing values in our dataset.
+After that, we have to add 'NA' in our 'Age' column.
+```{r}
+imp <- mice(train_new,5)
+fit <- with(imp,lm(Age ~  Pclass))
+pooled <- pool(fit)
+summary(pooled)
+imp
+```
+We can see that below there are 5 imputation datasets
+```{r}
+imp$imp$Age
+```
+```{r}
+train_new_demo <- complete(imp,action = 3)
+# which dataset I put is random.
+sort(colSums(is.na(train_new_demo)))
+# but there is still two missing variables, I think deleting is fine.
+train_new_demo <- na.omit(train_new_demo)
+sort(colSums(is.na(train_new_demo)))
+```
+Ok, we have already finished our data missing values.I think we can see our independent variables in the dataset.
+```{r}
+str(train_new_demo)
+head(train_new_demo,n=5)
+summary(train_new_demo)
+```
+there is one problem we can not ignore, we have to do the same change in our test dataset. Because we have to get all 418 passngers survival results, there are some 'NA' data in test. Now we do some data clean next. 
+```{r}
+# test_new_demo
+noquote(paste("The test dataset contains ", nrow(test_new_demo), " passangers."))
+str(test_new_demo)
+# I think we can do the same dataclean steps in test dataset.
+test_new_demo <- test_new_demo[ , !names(test_new_demo) %in% c("Cabin")]
+sort(colSums(is.na(test_new_demo)))
+# We can add values in age.
+imp <- mice(test_new_demo,5)
+fit <- with(imp,lm(Age ~  Pclass))
+pooled <- pool(fit)
+summary(pooled)
+imp
+imp$imp$Age
+test_new_demo <- complete(imp,action = 4)
+sort(colSums(is.na(test_new_demo))) # No missing values.
+```
 
+# Visual Analysis
+```{r}
+ggplot(data = train_new_demo,aes(x=Survived,fill=Sex)) + geom_bar(position = "fill") + labs(title = "the relationship between Sex and Survived condition")
+# We can see that there are more female can be survived in this diaster.
+```
+```{r}
+ggplot(data = train_new_demo,aes(x=Age)) + geom_density(color = "#00abff",size=1.5) + labs(title = "the distribution of Age")
+# we can see the distribution of age.
+```
+# Logistic regression
+```{r}
+model_full <- glm(Survived ~ Sex + Pclass + Age + SibSp + Parch + Fare + Embarked,data = train_new_demo)
+summary(model_full)
+```
 
-
-
-
+```{r}
+model_reduce <- glm(Survived ~ Sex + Pclass + Age + SibSp ,data = train_new_demo)
+summary(model_reduce)
+```
+We can use Chi-square test  to compare these two models.
+```{r}
+anova(model_reduce,model_full,test = "Chisq")
+coef(model_reduce)
+```
+We can see that the p-value is 0.2182, which indicate 'model_reduce' has the same ability to predict our response variable. So I believe that mode with these variables(Parch,Fare,Embarked) will not enhance the precision of our model. So I think we can use this 'model_reduce' model.
+```{r}
+prob <- predict(model_reduce,test_new_demo,type = "response")
+print(prob)
+submission <- data.frame(prob)
+submission$prob[submission$prob>.5] <- 1
+submission$prob[submission$prob<.5] <- 0
+passnger <- c(892:1309)
+submission_gender <- cbind(passnger,submission)
+write.csv(submission_gender,file="/Users/brycelee/Documents/titanic/submission.csv",quote=F,row.names = F)
+# In our data, The probability greater than 0.5 is divided into survival,while less than 0.5 is divided into death.
+logit.pred <- factor(prob >.5)
+# logit.pred
+logit.perf <- table(test_new_demo$Survived,logit.pred,dnn = c("Actual","Predicted"))
+logit.perf
+```
+Now we can get our accuracy.
+```{r}
+accuracy = (261+147)/(266+152)
+accuracy
+```
+In our model, we can see that our accuracy reach about 97.6 percent.
